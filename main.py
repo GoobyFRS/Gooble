@@ -1,30 +1,6 @@
 #!/usr/bin/env python3
 import time
 import logging
-import sys
-import ssl
-
-# Compatibility shim: Python 3.14 removed ssl.wrap_socket used by some libraries.
-# Provide a thin wrapper that uses SSLContext.wrap_socket so pymumble can work.
-if not hasattr(ssl, 'wrap_socket'):
-    def _wrap_socket(sock, keyfile=None, certfile=None, server_side=False,
-                     cert_reqs=None, ssl_version=None, ca_certs=None,
-                     do_handshake_on_connect=True, suppress_ragged_eofs=True,
-                     server_hostname=None):
-        ctx = ssl.create_default_context()
-        # If caller didn't provide a server_hostname, disable hostname checks
-        # to mimic legacy ssl.wrap_socket behavior.
-        if server_hostname is None:
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-        if cert_reqs is not None:
-            ctx.verify_mode = cert_reqs
-        if ca_certs:
-            ctx.load_verify_locations(ca_certs)
-        return ctx.wrap_socket(sock, server_hostname=server_hostname, do_handshake_on_connect=do_handshake_on_connect)
-
-    ssl.wrap_socket = _wrap_socket
-
 import pymumble_py3 as pymumble
 
 COMMAND_PREFIX = "g!"
@@ -41,19 +17,35 @@ def on_text_message(msg):
     # Find the user who sent the message
     sender = bot.users.get(msg.actor)
 
+    # Normalize sender name safely (sender may be None)
+    if sender is None:
+        sender_name = None
+    else:
+        # support dict-like or attribute access
+        if isinstance(sender, dict):
+            sender_name = sender.get("name")
+        else:
+            sender_name = getattr(sender, "name", None)
+
     # Ignore messages sent by the bot itself
-    if sender and sender["name"] == NICKNAME:
+    if sender_name == NICKNAME:
         return
 
-    message_text = msg.message.strip()
-    print(f"Received message from {sender['name']}: {message_text}")
+    # Protect against missing message attribute
+    message_text = getattr(msg, "message", "") or ""
+    message_text = message_text.strip()
+
+    print(f"Received message from {sender_name or 'unknown'}: {message_text}")
 
     # Basic command logic
     if message_text.startswith("!hello"):
-        response = f"Hello {sender['name']}! I am a Python Mumble bot."
+        response = f"Hello {sender_name or 'there'}! I am a Python Mumble bot."
 
         # Send a reply back to the user
-        bot.text_messages.send_to_user(msg.actor, response)
+        try:
+            bot.text_messages.send_to_user(msg.actor, response)
+        except Exception:
+            logging.exception("Failed to send text message reply")
 
 def main() -> int:
     """Start the bot and block until stopped.
