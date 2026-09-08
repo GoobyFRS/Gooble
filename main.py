@@ -1,7 +1,31 @@
 #!/usr/bin/env python3
 import time
+import logging
 import sys
-import pymumble_py3 as mumble
+import ssl
+
+# Compatibility shim: Python 3.14 removed ssl.wrap_socket used by some libraries.
+# Provide a thin wrapper that uses SSLContext.wrap_socket so pymumble can work.
+if not hasattr(ssl, 'wrap_socket'):
+    def _wrap_socket(sock, keyfile=None, certfile=None, server_side=False,
+                     cert_reqs=None, ssl_version=None, ca_certs=None,
+                     do_handshake_on_connect=True, suppress_ragged_eofs=True,
+                     server_hostname=None):
+        ctx = ssl.create_default_context()
+        # If caller didn't provide a server_hostname, disable hostname checks
+        # to mimic legacy ssl.wrap_socket behavior.
+        if server_hostname is None:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        if cert_reqs is not None:
+            ctx.verify_mode = cert_reqs
+        if ca_certs:
+            ctx.load_verify_locations(ca_certs)
+        return ctx.wrap_socket(sock, server_hostname=server_hostname, do_handshake_on_connect=do_handshake_on_connect)
+
+    ssl.wrap_socket = _wrap_socket
+
+import pymumble_py3 as pymumble
 
 COMMAND_PREFIX = "g!"
 DEFAULT_LOGGING_LEVEL = "INFO"
@@ -9,7 +33,7 @@ DEFAULT_LOGGING_LEVEL = "INFO"
 # Configuration
 SERVER = "mango.goobyfrs.net"
 PORT = 64738
-NICKNAME = "GoobsRobot"
+NICKNAME = "Goobs"
 PASSWORD = "birdhouse"
 
 def on_text_message(msg):
@@ -38,17 +62,25 @@ def main() -> int:
     """
     global bot
 
+    # Configure logging
+    logging.basicConfig(level=getattr(logging, DEFAULT_LOGGING_LEVEL))
+
     # 1. Initialize the Mumble client
     # pymumble_py3.Mumble signature: Mumble(host, user, port=..., password=...)
-    bot = mumble.Mumble(SERVER, NICKNAME, port=PORT, password=PASSWORD)
+    try:
+        bot = pymumble.Mumble(SERVER, NICKNAME, port=PORT, password=PASSWORD)
 
-    # 2. Register the callback for text messages
-    # use PYMUMBLE_CLBK_TEXTMESSAGERECEIVED from pymumble_py3
-    bot.callbacks.set_callback(mumble.constants.PYMUMBLE_CLBK_TEXTMESSAGERECEIVED, on_text_message)
+        # 2. Register the callback for text messages
+        bot.callbacks.set_callback(pymumble.constants.PYMUMBLE_CLBK_TEXTMESSAGERECEIVED, on_text_message)
 
-    # 3. Start the bot thread and wait for connection
-    bot.start()
-    bot.is_ready()
+        # 3. Start the bot thread and wait for connection
+        bot.start()
+        bot.is_ready()
+
+    except Exception as exc:  # connection or library errors
+        logging.exception("Failed to connect to Mumble server")
+        print(f"Error: {exc}")
+        return 2
 
     print(f"Bot '{NICKNAME}' successfully connected to {SERVER}:{PORT}")
 
