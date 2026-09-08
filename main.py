@@ -1,6 +1,28 @@
 #!/usr/bin/env python3
 import time
 import logging
+import ssl
+
+# Compatibility shim: Python 3.14 removed ``ssl.wrap_socket``; some
+# third-party libraries still call it. Provide a thin wrapper that
+# delegates to an SSLContext so older code keeps working.
+if not hasattr(ssl, "wrap_socket"):
+    def _compat_wrap_socket(sock, keyfile=None, certfile=None, server_side=False,
+                             cert_reqs=None, ssl_version=None, ca_certs=None,
+                             do_handshake_on_connect=True, suppress_ragged_eofs=True,
+                             server_hostname=None):
+        proto = ssl_version if ssl_version is not None else ssl.PROTOCOL_TLS
+        context = ssl.SSLContext(proto)
+        if certfile or keyfile:
+            context.load_cert_chain(certfile, keyfile)
+        return context.wrap_socket(sock,
+                                   server_side=server_side,
+                                   do_handshake_on_connect=do_handshake_on_connect,
+                                   suppress_ragged_eofs=suppress_ragged_eofs,
+                                   server_hostname=server_hostname)
+
+    ssl.wrap_socket = _compat_wrap_socket
+
 import pymumble_py3 as pymumble
 
 COMMAND_PREFIX = "g!"
@@ -49,7 +71,6 @@ def on_text_message(msg):
 
 def main() -> int:
     """Start the bot and block until stopped.
-
     Returns exit code.
     """
     global bot

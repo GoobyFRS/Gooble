@@ -22,8 +22,6 @@ pip install -r requirements.txt
 python3 ./main.py
 ```
 
-Run as systemd service on Linux by creating a unit file and enabling it (see `AGENTS.md` for an example).
-
 ## Code Decisions
 
 - Python3.12+ using pymumble.
@@ -39,4 +37,3 @@ Trigger with ```g!<command>```.
 Possible commands...
 
 - `g!ping` - Replies "pong".
-
