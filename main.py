@@ -31,7 +31,7 @@ DEFAULT_LOGGING_LEVEL = "INFO"
 # Configuration
 SERVER = "mango.goobyfrs.net"
 PORT = 64738
-NICKNAME = "Goobs"
+NICKNAME = "Gooble"
 PASSWORD = "birdhouse"
 
 def on_text_message(msg):
